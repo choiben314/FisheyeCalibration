@@ -166,15 +166,15 @@ void world2cam(double point2D[2], double point3D[3], struct ocam_model* myocam_m
 	}
 }
 
-void create_perspective_undistortion_LUT(cv::Mat& mapx, cv::Mat& mapy, struct ocam_model* ocam_model, float sf)
+void create_perspective_undistortion_LUT(cv::Mat& mapx, cv::Mat& mapy, struct ocam_model* ocam_model, double sf)
 {
 	int i, j;
 	int width = mapx.cols;
 	int height = mapx.rows;    
 
-	float Nxc = height / 2.0;
-	float Nyc = width / 2.0;
-	float Nz = -width / sf;
+	double Nxc = height / 2.0;
+	double Nyc = width / 2.0;
+	double Nz = -width / sf;
 	double M[3];
 	double m[2];
 
@@ -185,7 +185,7 @@ void create_perspective_undistortion_LUT(cv::Mat& mapx, cv::Mat& mapy, struct oc
 			M[1] = (j - Nyc);
 			M[2] = Nz;
 			world2cam(m, M, ocam_model);
-			mapx.at<float>(i, j) = (float)m[1];
-			mapy.at<float>(i, j) = (float)m[0];
+			mapx.at<double>(i, j) = (double)m[1];
+			mapy.at<double>(i, j) = (double)m[0];
 		}
 }

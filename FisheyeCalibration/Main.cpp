@@ -28,10 +28,10 @@ int main(int argc, char** argv) {
     const char* file = "./calib_results.txt";
     get_ocam_model(&o, file);
 
-    Mat regFrame, resampledFrame, fiducials_LLA, fiducials_LEA;
-    vector<Point2f> fiducials_PX;
-    vector<Point2d> fiducials_reprojected;
+    Mat regFrame, resampledFrame, fiducials_LLA, fiducials_LEA, fiducials_REPROJ;
+    vector<Point2d> fiducials_PX;
     Point3d centroid_ECEF;
+    double centroid_alt;
 
     Eigen::Matrix3d R_cam_LEA, R_cam_ENU;
     Eigen::Vector3d t_cam_LEA, t_cam_ENU;
@@ -48,7 +48,14 @@ int main(int argc, char** argv) {
 
     sampleENUSquare(regFrame, o, R_cam_ENU, t_cam_ENU, en_extent, num_pixels, true, resampledFrame);
 
-    //multENU2CAM(fiducials_LEA, fiducials_reprojected, R_cam_LEA, t_cam_LEA, o);
+    multENU2CAM(fiducials_LEA, fiducials_REPROJ, R_cam_LEA, t_cam_LEA, o);
+
+    for (int i = 0; i < fiducials_REPROJ.rows; i++) {
+        circle(regFrame, Point2d(fiducials_REPROJ.row(i)), 3, Scalar(0, 0, 255), -1);
+    }
+
+    imwrite(GCP_LOCATION + "reg_frame.png", regFrame);
+    imshow("Registration frame", regFrame);
 
     waitKey();
     return 0;
@@ -60,4 +67,10 @@ int main(int argc, char** argv) {
 * RANSAC Lambda**
 * Calculate reprojection error (after making fiducials super accurate)
 * Generate datasets? At what resolution? 128x128
+* 
+* Take random sample of three fiducials
+* Calculate residuals
+* Take the mean of lowest 50% residual errors as error metric
+* Choose best pose
+* 
 */

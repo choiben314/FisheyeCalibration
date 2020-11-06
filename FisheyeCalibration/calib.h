@@ -28,7 +28,7 @@ const Size FINAL_SIZE = Size(1280, 720);
 const int INIT_SECOND = 68;
 
 // Mouse
-Point2f point;
+Point2d point;
 bool clickStatus;
 
 /*** FUNCTION DEFINITIONS ***/
@@ -59,7 +59,7 @@ void getLocationsFile(const string &xml, const string& image_dir, vector<string>
 static void onMouseClick(int event, int x, int y, int /*flags*/, void* /*param*/) {
     if (event == EVENT_LBUTTONDOWN || event == EVENT_RBUTTONDOWN)
     {
-        point = Point2f((float)x, (float)y);
+        point = Point2d((double)x, (double)y);
         clickStatus = true;
         cout << point << endl;
     }
@@ -102,7 +102,7 @@ void downscale(Mat& old_frame, Mat& new_frame) {
 }
 
 // Get image coordinates of chessboard corners
-void getImagePoints(vector<vector<Point2f> >& imagePoints, Size& imageSize, vector<string>& imageList, Size BOARD_SIZE) {
+void getImagePoints(vector<vector<Point2d> >& imagePoints, Size& imageSize, vector<string>& imageList, Size BOARD_SIZE) {
 
     for (int currImage = 0; currImage < imageList.size(); currImage++) {
         cout << currImage << endl;
@@ -114,7 +114,7 @@ void getImagePoints(vector<vector<Point2f> >& imagePoints, Size& imageSize, vect
 
         imageSize = view.size();
 
-        vector<Point2f> pointBuf;
+        vector<Point2d> pointBuf;
 
         int chessBoardFlags = CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE;
         bool found = findChessboardCorners(view, BOARD_SIZE, pointBuf, chessBoardFlags);
@@ -134,16 +134,16 @@ void getImagePoints(vector<vector<Point2f> >& imagePoints, Size& imageSize, vect
 }
 
 // Helper function: get XYZ coordinates of chessboard corners
-static void calcBoardCornerHelper(Size BOARD_SIZE, float squareSize, vector<Point3f>& corners) {
+static void calcBoardCornerHelper(Size BOARD_SIZE, double squareSize, vector<Point3d>& corners) {
     corners.clear();
     for (int i = 0; i < BOARD_SIZE.height; ++i)
         for (int j = 0; j < BOARD_SIZE.width; ++j)
-            corners.push_back(Point3f(j * squareSize, i * squareSize, 0));
+            corners.push_back(Point3d(j * squareSize, i * squareSize, 0));
 }
 
 // Get XYZ object points for calibration
-void getObjectPoints(vector<vector<Point3f> >& objectPoints, Size BOARD_SIZE, float squareSize) {
-    float grid_width = squareSize * (BOARD_SIZE.width - 1);
+void getObjectPoints(vector<vector<Point3d> >& objectPoints, Size BOARD_SIZE, double squareSize) {
+    double grid_width = squareSize * (BOARD_SIZE.width - 1);
 
     calcBoardCornerHelper(BOARD_SIZE, squareSize, objectPoints[0]);
     objectPoints[0][BOARD_SIZE.width - 1].x = objectPoints[0][0].x + grid_width;
@@ -159,11 +159,11 @@ void calibrateOmniCamera(vector<string>& imageList, Mat& K, Mat& D, Mat& xi, vec
         fs["rvecs"] >> rvecs;
         fs["tvecs"] >> tvecs;
     } else {
-        vector<vector<Point3f> > objectPoints(1);
-        vector<vector<Point2f> > imagePoints;
+        vector<vector<Point3d> > objectPoints(1);
+        vector<vector<Point2d> > imagePoints;
         cv::Size imageSize;
 
-        float squareSize = 50;
+        double squareSize = 50;
 
         Mat cameraMatrix, distCoeffs, _rvecs, _tvecs, idx;
         cameraMatrix = Mat::eye(3, 3, CV_64F);
@@ -198,7 +198,7 @@ void showTransformedImages(vector<string>& imageList, Mat& K, Mat& D, Mat& xi) {
         }
 
         Mat map1, map2;
-        omnidir::initUndistortRectifyMap(K, D, xi, cv::Mat(), cv::Mat(), view.size(), CV_32FC1, map1, map2, omnidir::RECTIFY_PERSPECTIVE);
+        omnidir::initUndistortRectifyMap(K, D, xi, cv::Mat(), cv::Mat(), view.size(), CV_64F, map1, map2, omnidir::RECTIFY_PERSPECTIVE);
         cv::remap(view, rview, map1, map2, INTER_LINEAR);
         //omnidir::undistortImage(view, rview, K, D, xi, omnidir::RECTIFY_PERSPECTIVE);
 
@@ -226,7 +226,7 @@ void getRegistrationFrame(Mat& frame) {
 }
 
 // Get image coordinates of fiducial markers defined in GCP_PATH
-static void markFiducials(const Mat& frame, Mat& world_coords, vector<Point2f>& pixel_coords) {
+static void markFiducials(const Mat& frame, Mat& world_coords, vector<Point2d>& pixel_coords) {
     FileStorage gcp_read(GCP_PATH, FileStorage::READ);
     gcp_read["gcp"] >> world_coords;
 
@@ -253,7 +253,7 @@ static void markFiducials(const Mat& frame, Mat& world_coords, vector<Point2f>& 
 }
 
 // Get camera pose via PNP solver
-static void estimateCameraPose(const Mat &frame, const Mat& world_coords, const vector<Point2f>& pixel_coords, const Mat& K, const Mat& D, Mat& rvec, Mat& tvec, bool show, vector<Point2d>& new_pixel_coords) {
+static void estimateCameraPose(const Mat &frame, const Mat& world_coords, const vector<Point2d>& pixel_coords, const Mat& K, const Mat& D, Mat& rvec, Mat& tvec, bool show, vector<Point2d>& new_pixel_coords) {
     solvePnPRansac(world_coords, pixel_coords, K, D, rvec, tvec);
     projectPoints(world_coords, rvec, tvec, K, D, new_pixel_coords);
 
@@ -269,19 +269,19 @@ static void estimateCameraPose(const Mat &frame, const Mat& world_coords, const 
 }
 
 // Helper function: Get evenly spaced coordinates on a line between two points
-void generateLineCoordinatesHelper(const Point3f& start, const Point3f& end, int numCoords, vector<Point3f>& line_coords) {
+void generateLineCoordinatesHelper(const Point3d& start, const Point3d& end, int numCoords, vector<Point3d>& line_coords) {
     if (start.x == end.x) {
-        float total_distance = end.y - start.y;
-        for (float i = 0; i < numCoords; i++) {
-            float frac = i / (numCoords - 1);
-            line_coords.push_back(Point3f(start.x, start.y + frac * total_distance, 0));
+        double total_distance = end.y - start.y;
+        for (double i = 0; i < numCoords; i++) {
+            double frac = i / (numCoords - 1);
+            line_coords.push_back(Point3d(start.x, start.y + frac * total_distance, 0));
         }
     }
     else if (start.y == end.y) {
-        float total_distance = end.x - start.x;
-        for (float i = 0; i < numCoords; i++) {
-            float frac = i / (numCoords - 1);
-            line_coords.push_back(Point3f(start.x + frac * total_distance, start.y, 0));
+        double total_distance = end.x - start.x;
+        for (double i = 0; i < numCoords; i++) {
+            double frac = i / (numCoords - 1);
+            line_coords.push_back(Point3d(start.x + frac * total_distance, start.y, 0));
         }
     }
     else {
@@ -290,13 +290,13 @@ void generateLineCoordinatesHelper(const Point3f& start, const Point3f& end, int
 }
 
 // Get coordinates for displaying East-North axes
-void generateENZAxisCoordinates(const Point3f& min_corner, const Point3f& max_corner, Size coordFreq, Mat& K, Mat& D, Mat& rvec, Mat& tvec, vector<Point2f> &new_line_coords) {
-    Point3f start_h = Point3f((min_corner.x + max_corner.x) / 2, min_corner.y, 0);
-    Point3f end_h = Point3f((min_corner.x + max_corner.x) / 2, max_corner.y, 0);
-    Point3f start_v = Point3f(min_corner.x, (min_corner.y + max_corner.y) / 2, 0);
-    Point3f end_v = Point3f(max_corner.x, (min_corner.y + max_corner.y) / 2, 0);
+void generateENZAxisCoordinates(const Point3d& min_corner, const Point3d& max_corner, Size coordFreq, Mat& K, Mat& D, Mat& rvec, Mat& tvec, vector<Point2d> &new_line_coords) {
+    Point3d start_h = Point3d((min_corner.x + max_corner.x) / 2, min_corner.y, 0);
+    Point3d end_h = Point3d((min_corner.x + max_corner.x) / 2, max_corner.y, 0);
+    Point3d start_v = Point3d(min_corner.x, (min_corner.y + max_corner.y) / 2, 0);
+    Point3d end_v = Point3d(max_corner.x, (min_corner.y + max_corner.y) / 2, 0);
 
-    vector<Point3f> line_coords;
+    vector<Point3d> line_coords;
     generateLineCoordinatesHelper(start_v, end_v, coordFreq.height, line_coords);
     generateLineCoordinatesHelper(start_h, end_h, coordFreq.width, line_coords);
 
@@ -304,14 +304,14 @@ void generateENZAxisCoordinates(const Point3f& min_corner, const Point3f& max_co
 }
 
 // Get coordinates for sampling on East-North plane
-void generateENZPlaneCoordinates(const Point3f& min_corner, const Point3f& max_corner, const Size& size, Mat& K, Mat& D, Mat& rvec, Mat& tvec, vector<Point2f>& new_enz_coords) {
-    Point3f top_left = Point3f(min_corner.x, max_corner.y, min_corner.z);
-    vector<Point3f> left_edge;
+void generateENZPlaneCoordinates(const Point3d& min_corner, const Point3d& max_corner, const Size& size, Mat& K, Mat& D, Mat& rvec, Mat& tvec, vector<Point2d>& new_enz_coords) {
+    Point3d top_left = Point3d(min_corner.x, max_corner.y, min_corner.z);
+    vector<Point3d> left_edge;
     generateLineCoordinatesHelper(min_corner, top_left, size.height, left_edge);
-    vector<Point3f> enz_coords;
+    vector<Point3d> enz_coords;
     for (int i = 0; i < left_edge.size(); i++) {
-        vector<Point3f> row;
-        generateLineCoordinatesHelper(left_edge[i], Point3f(max_corner.x, left_edge[i].y, min_corner.z), size.width, row);
+        vector<Point3d> row;
+        generateLineCoordinatesHelper(left_edge[i], Point3d(max_corner.x, left_edge[i].y, min_corner.z), size.width, row);
 
         for (int j = 0; j < row.size(); j++) {
             enz_coords.push_back(row[j]);
@@ -321,7 +321,7 @@ void generateENZPlaneCoordinates(const Point3f& min_corner, const Point3f& max_c
 }
 
 // Helper function: Bilinear interpolation for image pixels
-cv::Vec3b getColorSubpixHelper(const cv::Mat& img, cv::Point2f pt)
+cv::Vec3b getColorSubpixHelper(const cv::Mat& img, cv::Point2d pt)
 {
     cv::Mat patch;
     cv::getRectSubPix(img, cv::Size(1, 1), pt, patch);
@@ -329,7 +329,7 @@ cv::Vec3b getColorSubpixHelper(const cv::Mat& img, cv::Point2f pt)
 }
 
 // Get and display ENZ axis coordinates
-void getCross(const Mat &frame, Point3f &min_corner, Point3f &max_corner, Size dim, Mat &K, Mat &D, Mat &xi, Mat &rvec, Mat &tvec, bool show, vector<Point2f> &line_coords) {
+void getCross(const Mat &frame, Point3d &min_corner, Point3d &max_corner, Size dim, Mat &K, Mat &D, Mat &xi, Mat &rvec, Mat &tvec, bool show, vector<Point2d> &line_coords) {
     generateENZAxisCoordinates(min_corner, max_corner, dim, K, D, rvec, tvec, line_coords);
     if (show) {
         Mat frameCopy = frame.clone();
@@ -342,7 +342,7 @@ void getCross(const Mat &frame, Point3f &min_corner, Point3f &max_corner, Size d
 }
 
 // Get and display ENZ sampling region coordinates
-void getSamplingRegion(const Mat &frame, Point3f& min_corner, Point3f& max_corner, Size dim, Mat& K, Mat& D, Mat& rvec, Mat& tvec, bool show, vector<Point2f> &enz_coords) {
+void getSamplingRegion(const Mat &frame, Point3d& min_corner, Point3d& max_corner, Size dim, Mat& K, Mat& D, Mat& rvec, Mat& tvec, bool show, vector<Point2d> &enz_coords) {
     generateENZPlaneCoordinates(min_corner, max_corner, dim, K, D, rvec, tvec, enz_coords);
     if (show) {
         Mat frameCopy = frame.clone();

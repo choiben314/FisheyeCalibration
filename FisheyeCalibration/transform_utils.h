@@ -1,5 +1,8 @@
 #pragma once
 
+#include <random>
+#include <chrono>
+
 //Compute latitude (radians), longitude (radians), and altitude (height above WGS84 ref. elipsoid, in meters) from ECEF position (in meters)
 //Latitude and longitude are also both given with respect to the WGS84 reference elipsoid.
 void positionECEF2LLA(Point3d const& Position, double& lat, double& lon, double& alt) {
@@ -148,37 +151,36 @@ void multLLA2LEA(Mat& mult_lla, Mat &mult_lea, const Point3d& ECEF_origin) {
 	}
 }
 
-void multCam2World(vector<Point2f>& pixel_coords, vector<Point3f>& backprojected, ocam_model& o) {
+void multCam2World(vector<Point2d>& pixel_coords, vector<Point3d>& backprojected, ocam_model& o) {
 	for (int i = 0; i < pixel_coords.size(); i++) {
 		double point3D[3];
 		double point2D[2] = { pixel_coords[i].y, pixel_coords[i].x };
 		cam2world(point3D, point2D, &o);
-		backprojected.push_back(Point3f(point3D[0], point3D[1], point3D[2]));
+		backprojected.push_back(Point3d(point3D[0], point3D[1], point3D[2]));
 	}
 }
 
-void cv2EigenF(Mat& src, Eigen::Matrix3d& dst) {
-	int rowA = 1;
-	int rowB = 10;
-	int rowC = 13;
-	dst.col(0) << src.at<float>(rowA, 0), src.at<float>(rowA, 1), src.at<float>(rowA, 2);
-	dst.col(1) << src.at<float>(rowB, 0), src.at<float>(rowB, 1), src.at<float>(rowB, 2);
-	dst.col(2) << src.at<float>(rowC, 0), src.at<float>(rowC, 1), src.at<float>(rowC, 2);
-}
+void sampleMatrix(const Mat& src, const int pool_size, const unsigned seed, Eigen::Matrix3d& dst) {
+	vector<int> sampleIndices;
+	for (int i = 0; i < pool_size; i++) {
+		sampleIndices.push_back(i);
+	}
 
-void cv2EigenD(Mat& src, Eigen::Matrix3d& dst) {
-	int rowA = 1;
-	int rowB = 10;
-	int rowC = 13;
+	shuffle(sampleIndices.begin(), sampleIndices.end(), default_random_engine(seed));
+
+	int rowA = sampleIndices[0];
+	int rowB = sampleIndices[1];
+	int rowC = sampleIndices[2];
+
 	dst.col(0) << src.at<double>(rowA, 0), src.at<double>(rowA, 1), src.at<double>(rowA, 2);
 	dst.col(1) << src.at<double>(rowB, 0), src.at<double>(rowB, 1), src.at<double>(rowB, 2);
 	dst.col(2) << src.at<double>(rowC, 0), src.at<double>(rowC, 1), src.at<double>(rowC, 2);
 }
 
-void getPoseInputMatrices(Mat& world, vector<Point3f>& backproj, Eigen::Matrix3d& world_vec, Eigen::Matrix3d& bearing_vec) {
+void getPoseInputMatrices(Mat& world, vector<Point3d>& backproj, Eigen::Matrix3d& world_vec, Eigen::Matrix3d& bearing_vec, const unsigned seed) {
 	Mat bp_matrix = Mat(backproj);
-	cv2EigenF(bp_matrix, bearing_vec);
-	cv2EigenD(world, world_vec);
+	sampleMatrix(bp_matrix, bp_matrix.rows, seed, bearing_vec);
+	sampleMatrix(world, world.rows, seed, world_vec);
 }
 
 void matToMatrix3d(Mat &in, Eigen::Matrix3d &out) {
@@ -190,7 +192,8 @@ void matToMatrix3d(Mat &in, Eigen::Matrix3d &out) {
 }
 
 // each row of enu is a different point
-void multENU2CAM(Mat& enu, vector<Point2d>& cam, Eigen::Matrix3d R, Eigen::Vector3d t, ocam_model& o) {
+void multENU2CAM(Mat& enu, Mat& cam, Eigen::Matrix3d R, Eigen::Vector3d t, ocam_model& o) {
+	cam = Mat(enu.rows, 2, CV_64F);
 	for (int row = 0; row < enu.rows; row++) {
 		Eigen::Vector3d v(enu.at<double>(row, 0), enu.at<double>(row, 1), enu.at<double>(row, 2));
 		Eigen::Vector3d v_cam = R.inverse() * (v - t);
@@ -199,7 +202,8 @@ void multENU2CAM(Mat& enu, vector<Point2d>& cam, Eigen::Matrix3d R, Eigen::Vecto
 
 		world2cam(point2D, point3D, &o);
 
-		cam.push_back(Point2d(point2D[1], point2D[0]));
+		cam.at<double>(row, 0) = point2D[1];
+		cam.at<double>(row, 1) = point2D[0];
 	}
 }
 
@@ -220,21 +224,53 @@ Eigen::Vector2d refCoordsToPixCoords(Eigen::Vector2d const& RefCoords, double GS
 	return(Eigen::Vector2d((RefCoords(0) - EastBounds(0)) / GSD, double(N - 1) - (RefCoords(1) - NorthBounds(0)) / GSD));
 }
 
-void findPose(vector<Point2f>& fiducials_PX, Mat &fiducials_LEA, ocam_model &o, Eigen::Matrix3d &R_cam_LEA, Eigen::Vector3d &t_cam_LEA) {
-	vector<Point3f> fiducials_BACKPROJ;
+double reprojectionError(Mat &orig_PX, Mat &orig_LEA, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d& t_cam_LEA, ocam_model& o, double percent_include) {
+	Mat reprojected, norm;
+	multENU2CAM(orig_LEA, reprojected, R_cam_LEA, t_cam_LEA, o);
+	Mat diff = orig_PX - reprojected;
+	reduce(diff.mul(diff), norm, 1, REDUCE_SUM, CV_64F);
+	cv::sort(norm, norm, SORT_EVERY_COLUMN + SORT_ASCENDING);
+	int end = percent_include * norm.rows;
+	Mat subMatrix = Mat(norm, cv::Range(0, end), cv::Range::all());
+
+	return cv::sum(subMatrix)[0];
+}
+
+void findPose(vector<Point2d>& fiducials_PX, Mat &fiducials_LEA, ocam_model &o, Eigen::Matrix3d &R_cam_LEA, Eigen::Vector3d &t_cam_LEA) {
+	vector<Point3d> fiducials_BACKPROJ;
 	multCam2World(fiducials_PX, fiducials_BACKPROJ, o);
+	Mat f_px = Mat(fiducials_PX.size(), 2, CV_64F, fiducials_PX.data());
 
 	Eigen::Matrix3d input_world, input_bearing;
+	std::Evector<std::tuple<Eigen::Vector3d, Eigen::Matrix3d>> possiblePoses;
 
-	getPoseInputMatrices(fiducials_LEA, fiducials_BACKPROJ, input_world, input_bearing);
+	unsigned seed = chrono::system_clock::now().time_since_epoch().count();
 
-	std::Evector<std::tuple<Eigen::Vector3d, Eigen::Matrix3d>> PossiblePoses;
-	LambdaTwistSolve(input_bearing, input_world, PossiblePoses, true);
-	cout << endl << "Number of possible poses: " << PossiblePoses.size() << endl;
-	std::tuple<Eigen::Vector3d, Eigen::Matrix3d> pose = PossiblePoses[0];
-	
-	R_cam_LEA = std::get<1>(pose);
-	t_cam_LEA = std::get<0>(pose);
+	double best_error = -1;
+	std::tuple<Eigen::Vector3d, Eigen::Matrix3d> best_pose;
+
+	for (int i = 0; i < 100000; i++) {
+		getPoseInputMatrices(fiducials_LEA, fiducials_BACKPROJ, input_world, input_bearing, seed + i);
+		LambdaTwistSolve(input_bearing, input_world, possiblePoses, true);
+		for (int poseIndex = 0; poseIndex < possiblePoses.size(); poseIndex++) {
+			std::tuple<Eigen::Vector3d, Eigen::Matrix3d> pose = possiblePoses[poseIndex];
+			R_cam_LEA = std::get<1>(pose);
+			t_cam_LEA = std::get<0>(pose);
+
+			double reproj_error = reprojectionError(f_px, fiducials_LEA, R_cam_LEA, t_cam_LEA, o, 1);
+			if (reproj_error < best_error || best_error == -1) {
+				best_error = reproj_error;
+				best_pose = pose;
+
+				cout << i << ", " << best_error << endl;
+			}
+		}
+	}
+
+	R_cam_LEA = std::get<1>(best_pose);
+	t_cam_LEA = std::get<0>(best_pose);
+
+	cout << "\nBest error: " << best_error << endl;
 }
 
 void poseLEA2ENU(Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d &t_cam_LEA, Eigen::Matrix3d& R_cam_ENU, Eigen::Vector3d& t_cam_ENU) {
@@ -242,7 +278,8 @@ void poseLEA2ENU(Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, Eigen::Vect
 	Eigen::Vector3d cam_center_ECEF = t_cam_LEA + centroid_vec_ECEF;
 	Point3d cam_center_pt_ECEF(cam_center_ECEF(0), cam_center_ECEF(1), cam_center_ECEF(2));
 	Point3d cam_center_LLA = positionECEF2LLA(cam_center_pt_ECEF);
-	Point3d origin_enu_LLA = Point3d(cam_center_LLA.x, cam_center_LLA.y, 395); // average this in a sec
+	Point3d centroid_LLA = positionECEF2LLA(centroid_ECEF);
+	Point3d origin_enu_LLA = Point3d(cam_center_LLA.x, cam_center_LLA.y, centroid_LLA.z);
 
 	Mat C_ECEF_ENU = latLon_2_C_ECEF_ENU(origin_enu_LLA.x, origin_enu_LLA.y);
 	Eigen::Matrix3d C_Matrix3d_ECEF_ENU;
@@ -282,10 +319,10 @@ void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d R, Eigen::V
 			world2cam(point_pixel, point_bearing, &o);
 
 			if (showFrames) {
-				circle(frameCopy, Point2f(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
+				circle(frameCopy, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
 			}
 			
-			Point2f sample_point(point_pixel[1], point_pixel[0]);
+			Point2d sample_point(point_pixel[1], point_pixel[0]);
 			outputFrame.at<Vec3b>(row, col) = getColorSubpixHelper(inputFrame, sample_point);
 		}
 	}
@@ -293,5 +330,7 @@ void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d R, Eigen::V
 	if (showFrames) {
 		imshow("Sampling Region", frameCopy);
 		imshow("Resampled", outputFrame);
+		imwrite(GCP_LOCATION + "sampling_region.png", frameCopy);
+		imwrite(GCP_LOCATION + "resampled_reg_frame.png", outputFrame);
 	}
 }
