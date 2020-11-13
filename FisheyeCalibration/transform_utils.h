@@ -236,6 +236,13 @@ double reprojectionError(Mat &orig_PX, Mat &orig_LEA, Eigen::Matrix3d& R_cam_LEA
 	return cv::sum(subMatrix)[0];
 }
 
+void reprojectionErrorIndividual(Mat& orig_PX, Mat& orig_LEA, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d& t_cam_LEA, ocam_model& o, Mat &subMatrix) {
+	Mat reprojected, norm;
+	multENU2CAM(orig_LEA, reprojected, R_cam_LEA, t_cam_LEA, o);
+	Mat diff = orig_PX - reprojected;
+	reduce(diff.mul(diff), subMatrix, 1, REDUCE_SUM, CV_64F);
+}
+
 void findPose(vector<Point2d>& fiducials_PX, Mat &fiducials_LEA, ocam_model &o, Eigen::Matrix3d &R_cam_LEA, Eigen::Vector3d &t_cam_LEA) {
 	vector<Point3d> fiducials_BACKPROJ;
 	multCam2World(fiducials_PX, fiducials_BACKPROJ, o);
@@ -249,7 +256,7 @@ void findPose(vector<Point2d>& fiducials_PX, Mat &fiducials_LEA, ocam_model &o, 
 	double best_error = -1;
 	std::tuple<Eigen::Vector3d, Eigen::Matrix3d> best_pose;
 
-	for (int i = 0; i < 100000; i++) {
+	for (int i = 0; i < 5000; i++) {
 		getPoseInputMatrices(fiducials_LEA, fiducials_BACKPROJ, input_world, input_bearing, seed + i);
 		LambdaTwistSolve(input_bearing, input_world, possiblePoses, true);
 		for (int poseIndex = 0; poseIndex < possiblePoses.size(); poseIndex++) {
@@ -290,6 +297,23 @@ void poseLEA2ENU(Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, Eigen::Vect
 
 	R_cam_ENU = C_Matrix3d_ECEF_ENU * R_cam_LEA;
 	t_cam_ENU = C_Matrix3d_ECEF_ENU * (cam_center_ECEF - origin_enu_ECEF);
+}
+
+double get_en_extent(double aperture_dist_px, Point3d& centroid_ECEF, Eigen::Vector3d& t_cam_LEA, ocam_model& o) {
+	double lat, lon, alt;
+	positionECEF2LLA(centroid_ECEF, lat, lon, alt);
+
+	Eigen::Vector3d centroid_vec_ECEF(centroid_ECEF.x, centroid_ECEF.y, centroid_ECEF.z);
+	Eigen::Vector3d cam_center_ECEF = t_cam_LEA + centroid_vec_ECEF;
+	Point3d cam_center_pt_ECEF(cam_center_ECEF(0), cam_center_ECEF(1), cam_center_ECEF(2));
+	Point3d cam_center_LLA = positionECEF2LLA(cam_center_pt_ECEF);
+
+	double aperture3D[3];
+	double aperture2D[2] = { FINAL_SIZE.height / 2 + aperture_dist_px,  FINAL_SIZE.width / 2 };
+	cam2world(aperture3D, aperture2D, &o);
+	double theta = acos(-aperture3D[2]);
+
+	return tan(theta) * (cam_center_LLA.z - alt);
 }
 
 void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d R, Eigen::Vector3d t, double en_extent, double num_pixels, bool showFrames, Mat &outputFrame) {

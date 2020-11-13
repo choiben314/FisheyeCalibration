@@ -9,23 +9,26 @@ using namespace cv;
 
 /*** USER-DEFINED PARAMS ***/
 
+const string LOCATION = "elgin_07_27_2020";
+const string VIDEO = "DJI_0001"; // .MOV
+const int INIT_SECOND = 0;
+const double APERTURE_DISTANCE_PX = 283;
+
 // File Paths
 const string CAPTURE_MODE = "live_fisheye";
-const string GCP_LOCATION = "E:/NIFA/footage/harmony_09_13_2020/";
-
 const string LIVE_STREAM_PATH = "rtmp://10.1.1.1/live/drone";
 const string LIVE_IMAGES_PATH = "E:/NIFA/calibration/" + CAPTURE_MODE + "/image_";
 const string CALIB_IMAGES_PATH = "E:/NIFA/calibration/" + CAPTURE_MODE + "/";
 const string CALIB_IMAGES_LOCATIONS_PATH = "E:/NIFA/calibration/params/" + CAPTURE_MODE + "_paths.xml";
 const string CAMERA_MODEL_PATH = "E:/NIFA/calibration/camera_models/" + CAPTURE_MODE + "_model.xml";
+const string GCP_LOCATION = "E:/NIFA/footage/" + LOCATION + "/";
 const string GCP_PATH = GCP_LOCATION + "gcp.xml";
-const string GCP_FRAME_PATH = GCP_LOCATION + "DJI_0001.MOV";
+const string GCP_FRAME_PATH = GCP_LOCATION + VIDEO + ".MOV";
 const string GCP_PIXEL_COORDS_PATH = GCP_LOCATION + "pixel_coords.xml";
 
 // Calibration
 const Size BOARD_SIZE = Size(7, 5);
 const Size FINAL_SIZE = Size(1280, 720);
-const int INIT_SECOND = 68;
 
 // Mouse
 Point2d point;
@@ -217,7 +220,8 @@ void showTransformedImages(vector<string>& imageList, Mat& K, Mat& D, Mat& xi) {
 // Get image frame for registration
 void getRegistrationFrame(Mat& frame) {
     VideoCapture cap(GCP_FRAME_PATH);
-    cap.set(CAP_PROP_POS_FRAMES, INIT_SECOND * 30);
+    int frame_rate = static_cast<int>(round(cap.get(CAP_PROP_FPS)));
+    cap.set(CAP_PROP_POS_FRAMES, INIT_SECOND * frame_rate);
     cap >> frame;
     if (frame.size() != FINAL_SIZE) {
         downscale(frame, frame);
