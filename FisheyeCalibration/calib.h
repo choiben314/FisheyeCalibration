@@ -10,9 +10,13 @@ using namespace cv;
 /*** USER-DEFINED PARAMS ***/
 
 const string LOCATION = "elgin_07_27_2020";
-const string VIDEO = "DJI_0001"; // .MOV
-const int INIT_SECOND = 0;
+const string VIDEO = "DJI_0003"; // .MOV
+const string REG_VIDEO = "DJI_0003"; // .MOV
+const int REG_INIT_SECOND = 0;
 const double APERTURE_DISTANCE_PX = 283;
+const double OUTPUT_FPS = 10;
+const double OUTPUT_RESOLUTION_PX = 512;
+const int MEDIAN_BLUR_RADIUS = 23;
 
 // File Paths
 const string CAPTURE_MODE = "live_fisheye";
@@ -24,7 +28,9 @@ const string CAMERA_MODEL_PATH = "E:/NIFA/calibration/camera_models/" + CAPTURE_
 const string GCP_LOCATION = "E:/NIFA/footage/" + LOCATION + "/";
 const string GCP_PATH = GCP_LOCATION + "gcp.xml";
 const string GCP_FRAME_PATH = GCP_LOCATION + VIDEO + ".MOV";
+const string GCP_REG_FRAME_PATH = GCP_LOCATION + REG_VIDEO + ".MOV";
 const string GCP_PIXEL_COORDS_PATH = GCP_LOCATION + "pixel_coords.xml";
+const string VIDEO_SAVE_PATH = "E:/NIFA/datasets/" + LOCATION + "_" + VIDEO + ".avi";
 
 // Calibration
 const Size BOARD_SIZE = Size(7, 5);
@@ -219,9 +225,9 @@ void showTransformedImages(vector<string>& imageList, Mat& K, Mat& D, Mat& xi) {
 
 // Get image frame for registration
 void getRegistrationFrame(Mat& frame) {
-    VideoCapture cap(GCP_FRAME_PATH);
+    VideoCapture cap(GCP_REG_FRAME_PATH);
     int frame_rate = static_cast<int>(round(cap.get(CAP_PROP_FPS)));
-    cap.set(CAP_PROP_POS_FRAMES, INIT_SECOND * frame_rate);
+    cap.set(CAP_PROP_POS_FRAMES, REG_INIT_SECOND * frame_rate);
     cap >> frame;
     if (frame.size() != FINAL_SIZE) {
         downscale(frame, frame);
@@ -370,3 +376,16 @@ void getRegisteredImage(const Mat& frame, vector<Point2d>& enz_coords, bool show
         imshow("Registered and resampled", new_frame);
     }
 }
+
+// Usage:
+
+//takeLivePhotos(LIVE_STREAM_PATH, LIVE_IMAGES_PATH, 0);
+//return 0;
+//vector<string> imageList;
+
+//Mat K, D, xi;
+//vector<Mat> rvecs, tvecs;
+
+//getLocationsFile(CALIB_IMAGES_LOCATIONS_PATH, CALIB_IMAGES_PATH, imageList);
+//calibrateOmniCamera(imageList, K, D, xi, rvecs, tvecs);
+//showTransformedImages(imageList, K, D, xi);

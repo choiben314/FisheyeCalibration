@@ -299,6 +299,27 @@ void poseLEA2ENU(Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, Eigen::Vect
 	t_cam_ENU = C_Matrix3d_ECEF_ENU * (cam_center_ECEF - origin_enu_ECEF);
 }
 
+void reprojectExperiments(Mat &img_ref, vector<Point2d> &fiducials_PX, Mat &fiducials_LEA, Mat &fiducials_REPROJ, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d &t_cam_LEA, ocam_model &o) {
+	Mat f_px = Mat(fiducials_PX.size(), 2, CV_64F, fiducials_PX.data());
+	Mat f_reproj_error;
+	reprojectionErrorIndividual(f_px, fiducials_LEA, R_cam_LEA, t_cam_LEA, o, f_reproj_error);
+	Size center = FINAL_SIZE / 2;
+	vector<Point2d> dist_error;
+	for (int i = 0; i < f_px.rows; i++) {
+		double dist = sqrt(pow(center.width - f_px.at<double>(i, 0), 2) + pow(center.width - f_px.at<double>(i, 1), 2));
+		double error = sqrt(f_reproj_error.at<double>(i));
+		dist_error.push_back(Point2d(dist, error));
+	}
+	FileStorage fs(GCP_LOCATION + "dist_error.csv", FileStorage::WRITE);
+	fs << "dist_error" << dist_error;
+	Mat outputRegFrame;
+	img_ref.copyTo(outputRegFrame);
+	for (int i = 0; i < fiducials_REPROJ.rows; i++) {
+		circle(outputRegFrame, Point2d(fiducials_REPROJ.row(i)), 3, Scalar(0, 0, 255), -1);
+	}
+	imwrite(GCP_LOCATION + "reg_frame.png", outputRegFrame);
+}
+
 double get_en_extent(double aperture_dist_px, Point3d& centroid_ECEF, Eigen::Vector3d& t_cam_LEA, ocam_model& o) {
 	double lat, lon, alt;
 	positionECEF2LLA(centroid_ECEF, lat, lon, alt);
