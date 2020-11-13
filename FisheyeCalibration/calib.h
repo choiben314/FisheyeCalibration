@@ -9,9 +9,9 @@ using namespace cv;
 
 /*** USER-DEFINED PARAMS ***/
 
-const string LOCATION = "elgin_07_27_2020";
-const string VIDEO = "DJI_0003"; // .MOV
-const string REG_VIDEO = "DJI_0003"; // .MOV
+const string LOCATION = "becker_07_24_2020";
+const string VIDEO = "DJI_0001"; // .MOV
+const string REG_VIDEO = "DJI_0001"; // .MOV
 const int REG_INIT_SECOND = 0;
 const double APERTURE_DISTANCE_PX = 283;
 const double OUTPUT_FPS = 10;

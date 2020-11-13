@@ -1,8 +1,3 @@
-//This module defines the FRF (Flexible Raster Format) interface. FRF is a raster image format for
-//storing multi-layer imagery and other raster data (possibly with meaningful units) in many different formats and bit depths.
-//Author: Bryan Poling
-//Copyright (c) 2020 Sentek Systems, LLC. All rights reserved. 
-
 //System Includes
 #include <cmath>
 #include <limits>
@@ -2365,5 +2360,93 @@ void FRFImage::EvaluateVisualizationForRow(uint16_t VisualizationIndex, uint16_t
 	}
 }
 
+// *******************************************************************************************************************************
+// ****************************************   Load and Inspect Example Shadow Map File   *****************************************
+// *******************************************************************************************************************************
+static void printLayerInfo(FRFLayer* Layer) {
+	fprintf(stderr, "Name: %s\r\n", Layer->Name.c_str());
+	fprintf(stderr, "Description: %s\r\n", Layer->Description.c_str());
+	fprintf(stderr, "Units: %s\r\n", Layer->GetUnitsStringInMostReadableForm().c_str());
+	fprintf(stderr, "Type Code: %u (%s)\r\n", (unsigned int)Layer->GetTypeCode(), Layer->GetTypeString().c_str());
+	fprintf(stderr, "alpha: %.8e,  beta: %.8f\r\n", Layer->alpha, Layer->beta);
+	fprintf(stderr, "Validity Mask: %s\r\n", Layer->HasValidityMask ? "Yes" : "No");
+	fprintf(stderr, "Total size: %f MB\r\n", ((double)(Layer->GetTotalBytesWithValidityMask() / ((uint64_t)100000U))) / 10.0);
 
+	std::tuple<double, double> range = Layer->GetRange();
+	if (Layer->GetTypeCode() <= 68U) {
+		fprintf(stderr, "Value Range: [%f, %f]\r\n", std::get<0>(range), std::get<1>(range));
+		fprintf(stderr, "Value Step Size: %e\r\n", Layer->GetStepSize());
+	}
+	else
+		fprintf(stderr, "Value Range: [%e, %e]\r\n", std::get<0>(range), std::get<1>(range));
+}
+
+static void LoadImageAndInspectShadowMapFile(std::string Filename) {
+	FRFImage shadowMap; //Create a new empty FRF Image
+
+	//Clear the image object and load from disk
+	if (shadowMap.LoadFromDisk(Filename))
+		std::cerr << "FRF Image loaded successfully.\r\n";
+	else
+		std::cerr << "FRF Image loading failed.\r\n";
+
+	//Check to see if the FRF file is actually a shadow map... it should have a shadow map information custom block
+	if (IsShadowMapFile(shadowMap))
+		std::cerr << "This is a shadow map.\r\n";
+	else {
+		std::cerr << "This is not a shadow map! Stopping now.\r\n";
+		return;
+	}
+
+	//Print out some basic info about the file
+	std::tuple<uint16_t, uint16_t> fileVersion = shadowMap.getFileVersion();
+	fprintf(stderr, "FRF version %u.%u\r\n", (unsigned int)std::get<0>(fileVersion), (unsigned int)std::get<1>(fileVersion));
+	fprintf(stderr, "Dimensions: %u rows x %u cols\r\n", (unsigned int)shadowMap.Height(), (unsigned int)shadowMap.Width());
+	fprintf(stderr, "Number of Layers: %u,  Number of Visualizations: %u\r\n", (unsigned int)shadowMap.NumberOfLayers(),
+		(unsigned int)shadowMap.GetNumberOfVisualizations());
+	fprintf(stderr, "Shadow Map is Geo-Registered: %s\r\n", shadowMap.IsGeoRegistered() ? "Yes" : "No");
+	if (shadowMap.IsGeoRegistered()) {
+		std::tuple<double, double> LatLon = shadowMap.GetCoordinatesOfPixel((uint16_t)0U, (uint16_t)7U);
+		std::cerr << "The latitude  of pixel (row, col) = (0, 7) is: " << std::get<0>(LatLon) * 180.0 / PI << " degrees.\r\n";
+		std::cerr << "The longitude of pixel (row, col) = (0, 7) is: " << std::get<1>(LatLon) * 180.0 / PI << " degrees.\r\n";
+	}
+	std::cerr << "\r\n";
+
+	//Print out some layer info for each layer
+	for (uint16_t layerIndex = 0U; layerIndex < shadowMap.NumberOfLayers(); layerIndex++) {
+		fprintf(stderr, "\r\n**************  Layer %u  **************\r\n", (unsigned int)layerIndex);
+		printLayerInfo(shadowMap.Layer(layerIndex));
+	}
+	std::cerr << "\r\n";
+
+	//Print out some pixel values from the first layer
+	if (shadowMap.NumberOfLayers() == 0U)
+		std::cerr << "Uh-oh. This image is empty. Nothing to display.\r\n";
+	else {
+		std::cerr << "Value at (73,24): " << shadowMap.Layer(0U)->GetValue(73U, 24U) << "\r\n";
+		std::cerr << "Value at (12,82): " << shadowMap.Layer(0U)->GetValue(12U, 82U) << "\r\n";
+		std::cerr << "Value at (31,3900): " << shadowMap.Layer(0U)->GetValue(31U, 3900U) << "\r\n";
+		std::cerr << "Value at (19,122): " << shadowMap.Layer(0U)->GetValue(19U, 122U) << "\r\n";
+		std::cerr << "Value at (19,123): " << shadowMap.Layer(0U)->GetValue(19U, 123U) << "\r\n";
+		std::cerr << "Value at (19,124): " << shadowMap.Layer(0U)->GetValue(19U, 124U) << "\r\n";
+	}
+	std::cerr << "\r\n";
+
+	//Inspect the shadow map information block
+	ShadowMapInfoBlock myShadowMapInfoBlock;
+	if (myShadowMapInfoBlock.LoadFromFRFFile(shadowMap)) {
+		if (std::isnan(myShadowMapInfoBlock.FileTimeEpoch_TOW))
+			std::cerr << "Absolute time information not available.\r\n";
+		else {
+			std::cerr << "Absolute time information is known.\r\n";
+			std::cerr << "File 0-time epoch corresponds with GPS Week " << myShadowMapInfoBlock.FileTimeEpoch_Week <<
+				", TOW = " << myShadowMapInfoBlock.FileTimeEpoch_TOW << " seconds.\r\n";
+		}
+		for (uint16_t layerIndex = 0U; layerIndex < shadowMap.NumberOfLayers(); layerIndex++)
+			std::cerr << "Layer " << layerIndex << " file-time timestamp: " << myShadowMapInfoBlock.LayerTimeTags[layerIndex] << " seconds.\r\n";
+		std::cerr << "\r\n";
+	}
+	else
+		std::cerr << "Error: shadow map information block could not be decoded. Corrupt or non-conformant file.\r\n";
+}
 
