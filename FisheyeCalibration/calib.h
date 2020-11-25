@@ -31,8 +31,8 @@ const string GCP_PATH = GCP_LOCATION + "gcp.xml";
 const string GCP_FRAME_PATH = GCP_LOCATION + VIDEO + ".MOV";
 const string GCP_REG_FRAME_PATH = GCP_LOCATION + REG_VIDEO + ".MOV";
 const string GCP_PIXEL_COORDS_PATH = GCP_LOCATION + "pixel_coords.xml";
-const string VIDEO_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/" + LOCATION + "_111" + VIDEO + ".avi";
-const string FRF_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/frf/test111.frf";
+const string VIDEO_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/" + LOCATION + "_" + VIDEO + ".avi";
+const string FRF_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/frf/test.frf";
 
 // Calibration
 const Size BOARD_SIZE = Size(7, 5);
