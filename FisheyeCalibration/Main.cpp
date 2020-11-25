@@ -14,7 +14,7 @@ using namespace cv;
 int main(int argc, char** argv) {
     Mat img_ref, fiducials_LLA, fiducials_LEA, fiducials_REPROJ;
     vector<Point2d> fiducials_PX;
-    Point3d centroid_ECEF;
+    Point3d centroid_ECEF; // This is ENU Origin
     double centroid_alt;
 
     struct ocam_model o;
@@ -36,7 +36,34 @@ int main(int argc, char** argv) {
     findPose(fiducials_PX, fiducials_LEA, o, R_cam_LEA, t_cam_LEA);
     poseLEA2ENU(centroid_ECEF, R_cam_LEA, t_cam_LEA, R_cam_ENU, t_cam_ENU);
 
-    double en_extent = get_en_extent(APERTURE_DISTANCE_PX, centroid_ECEF, t_cam_LEA, o);
+    double theta;
+    double en_extent = get_en_extent(APERTURE_DISTANCE_PX, theta, centroid_ECEF, t_cam_LEA, o);
+
+    Eigen::Vector3d OA_ENU = R_cam_ENU * Eigen::Vector3d(0, 0, 1); // Optical Axis in the Camera Frame
+
+    Eigen::AngleAxisd AA1(theta, Eigen::Vector3d(1, 0, 0));
+    Eigen::AngleAxisd AA2(theta, Eigen::Vector3d(-1, 0, 0));
+    Eigen::AngleAxisd AA3(theta, Eigen::Vector3d(0, 1, 0));
+    Eigen::AngleAxisd AA4(theta, Eigen::Vector3d(0, -1, 0));
+    Eigen::Vector3d v1 = AA1.toRotationMatrix() * OA_ENU;
+    Eigen::Vector3d v2 = AA2.toRotationMatrix() * OA_ENU;
+    Eigen::Vector3d v3 = AA3.toRotationMatrix() * OA_ENU;
+    Eigen::Vector3d v4 = AA4.toRotationMatrix() * OA_ENU;
+
+    double t1 = -t_cam_ENU(2) / v1(2);
+    double t2 = -t_cam_ENU(2) / v2(2);
+    double t3 = -t_cam_ENU(2) / v3(2);
+    double t4 = -t_cam_ENU(2) / v4(2);
+
+    Eigen::Vector3d X1_ENU = t_cam_ENU + v1 * t1;
+    Eigen::Vector3d X2_ENU = t_cam_ENU + v2 * t2;
+    Eigen::Vector3d X3_ENU = t_cam_ENU + v3 * t3;
+    Eigen::Vector3d X4_ENU = t_cam_ENU + v4 * t4;
+
+    double eastMin = min({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
+    double eastMax = max({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
+    double northMin = min({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
+    double northMax = max({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
 
     // Reprojection validation
 
@@ -81,14 +108,15 @@ int main(int argc, char** argv) {
     myShadowMapInfoBlock.FileTimeEpoch_TOW = std::nan("");
 
     Eigen::Vector2d UL(0, 0);
-    Eigen::Vector2d UR(0, 511);
+    Eigen::Vector2d UR(511, 0);
     Eigen::Vector2d LR(511, 511);
-    Eigen::Vector2d LL(511, 0);
+    Eigen::Vector2d LL(0, 511);
     Eigen::Vector3d UL_LLA, LR_LLA, UR_LLA, LL_LLA;
-    positionPX2LLA(img_ref, UL, centroid_ECEF, en_extent, OUTPUT_RESOLUTION_PX, UL_LLA, R_cam_ENU, t_cam_ENU, o);
-    positionPX2LLA(img_ref, LL, centroid_ECEF, en_extent, OUTPUT_RESOLUTION_PX, LL_LLA, R_cam_ENU, t_cam_ENU, o);
-    positionPX2LLA(img_ref, LR, centroid_ECEF, en_extent, OUTPUT_RESOLUTION_PX, LR_LLA, R_cam_ENU, t_cam_ENU, o);
-    positionPX2LLA(img_ref, UR, centroid_ECEF, en_extent, OUTPUT_RESOLUTION_PX, UR_LLA, R_cam_ENU, t_cam_ENU, o);
+
+    positionPX2LLA(img_ref, UL, centroid_ECEF, eastMin, eastMax, northMin, northMax, OUTPUT_RESOLUTION_PX, UL_LLA, R_cam_ENU, t_cam_ENU, o);
+    positionPX2LLA(img_ref, LL, centroid_ECEF, eastMin, eastMax, northMin, northMax, OUTPUT_RESOLUTION_PX, LL_LLA, R_cam_ENU, t_cam_ENU, o);
+    positionPX2LLA(img_ref, LR, centroid_ECEF, eastMin, eastMax, northMin, northMax, OUTPUT_RESOLUTION_PX, LR_LLA, R_cam_ENU, t_cam_ENU, o);
+    positionPX2LLA(img_ref, UR, centroid_ECEF, eastMin, eastMax, northMin, northMax, OUTPUT_RESOLUTION_PX, UR_LLA, R_cam_ENU, t_cam_ENU, o);
 
     imshow("Ref", img_ref);
 
@@ -113,9 +141,10 @@ int main(int argc, char** argv) {
 
             cvtColor(binary, binary, COLOR_GRAY2RGB);
 
-            sampleENUSquare(img_rot, o, R_cam_ENU, t_cam_ENU, en_extent, OUTPUT_RESOLUTION_PX, false, img_rot_sampled);
-            sampleENUSquare(binary, o, R_cam_ENU, t_cam_ENU, en_extent, OUTPUT_RESOLUTION_PX, false, binary_sampled);
-            //video << binary_sampled;
+            sampleENUSquare(img_rot, o, R_cam_ENU, t_cam_ENU, eastMin, eastMax, northMin, northMax, OUTPUT_RESOLUTION_PX, false, img_rot_sampled);
+            sampleENUSquare(binary, o, R_cam_ENU, t_cam_ENU, eastMin, eastMax, northMin, northMax, OUTPUT_RESOLUTION_PX, false, binary_sampled);
+            
+            video << binary_sampled;
             cvtColor(binary_sampled, binary_sampled, COLOR_RGB2GRAY);
             imshow("Frame", binary_sampled);
             imshow("Frame 2", img_rot_sampled);
@@ -149,10 +178,11 @@ int main(int argc, char** argv) {
     //We will provide the GPS coordinates of the 4 corners of the image and let the FRF library fill in the block for us.
     FRFGeoRegistration GeoRegistrationTag;
     GeoRegistrationTag.Altitude = std::nan(""); //Raster layer is associated with the Earth's surface
-    Eigen::Vector2d UL_LL(UL(0), UL(1));
-    Eigen::Vector2d UR_LL(UR(1), UR(2));
-    Eigen::Vector2d LL_LL(LL(0), LL(1));
-    Eigen::Vector2d LR_LL(LR(1), LR(2));
+    
+    Eigen::Vector2d UL_LL(UL_LLA(0), UL_LLA(1));
+    Eigen::Vector2d UR_LL(UR_LLA(0), UR_LLA(1));
+    Eigen::Vector2d LL_LL(LL_LLA(0), LL_LLA(1));
+    Eigen::Vector2d LR_LL(LR_LLA(0), LR_LLA(1));
 
     GeoRegistrationTag.RegisterFromCornerLocations(UL_LL, UR_LL, LL_LL, LR_LL);
     shadowMap.SetGeoRegistration(GeoRegistrationTag);

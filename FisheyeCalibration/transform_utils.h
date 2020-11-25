@@ -269,7 +269,7 @@ void findPose(vector<Point2d>& fiducials_PX, Mat &fiducials_LEA, ocam_model &o, 
 				best_error = reproj_error;
 				best_pose = pose;
 
-				cout << i << ", " << best_error << endl;
+				//cout << i << ", " << best_error << endl;
 			}
 		}
 	}
@@ -277,7 +277,8 @@ void findPose(vector<Point2d>& fiducials_PX, Mat &fiducials_LEA, ocam_model &o, 
 	R_cam_LEA = std::get<1>(best_pose);
 	t_cam_LEA = std::get<0>(best_pose);
 
-	cout << "\nBest error: " << best_error << endl;
+	//cout << "\nBest error: " << best_error << endl;
+	cout << "Pose estimated." << endl;
 }
 
 void poseLEA2ENU(Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d &t_cam_LEA, Eigen::Matrix3d& R_cam_ENU, Eigen::Vector3d& t_cam_ENU) {
@@ -320,7 +321,7 @@ void reprojectExperiments(Mat &img_ref, vector<Point2d> &fiducials_PX, Mat &fidu
 	imwrite(GCP_LOCATION + "reg_frame.png", outputRegFrame);
 }
 
-double get_en_extent(double aperture_dist_px, Point3d& centroid_ECEF, Eigen::Vector3d& t_cam_LEA, ocam_model& o) {
+double get_en_extent(double aperture_dist_px, double &theta, Point3d& centroid_ECEF, Eigen::Vector3d& t_cam_LEA, ocam_model& o) {
 	double lat, lon, alt;
 	positionECEF2LLA(centroid_ECEF, lat, lon, alt);
 
@@ -332,16 +333,18 @@ double get_en_extent(double aperture_dist_px, Point3d& centroid_ECEF, Eigen::Vec
 	double aperture3D[3];
 	double aperture2D[2] = { FINAL_SIZE.height / 2 + aperture_dist_px,  FINAL_SIZE.width / 2 };
 	cam2world(aperture3D, aperture2D, &o);
-	double theta = acos(-aperture3D[2]);
+	theta = acos(-aperture3D[2]);
 
 	return tan(theta) * (cam_center_LLA.z - alt);
 }
 
-void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d &R, Eigen::Vector3d &t, double en_extent, double num_pixels, bool showFrames, Mat &outputFrame) {
+void sampleENUSquare(Mat& inputFrame, ocam_model& o, Eigen::Matrix3d& R, Eigen::Vector3d& t, double eastMin, double eastMax, double northMin, double northMax, double num_pixels, bool showFrames, Mat& outputFrame) {
 
-	Eigen::Vector2d NorthBounds(-en_extent, en_extent);
-	Eigen::Vector2d EastBounds(-en_extent, en_extent);
-	double GSD = 2 * en_extent / num_pixels;
+	double maxExtent = max({eastMax - eastMin, northMax - northMin});
+	Eigen::Vector2d center(0.5 * (eastMin + eastMax), 0.5 * (northMin + northMax));
+	Eigen::Vector2d NorthBounds(center(1) - maxExtent / 2, center(1) + maxExtent / 2);
+	Eigen::Vector2d EastBounds(center(0) - maxExtent / 2, center(0) + maxExtent / 2);
+	double GSD = maxExtent / num_pixels;
 
 	outputFrame = Mat(num_pixels, num_pixels, CV_8UC3);
 
@@ -366,7 +369,7 @@ void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d &R, Eigen::
 			if (showFrames) {
 				circle(frameCopy, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
 			}
-			
+
 			Point2d sample_point(point_pixel[1], point_pixel[0]);
 			outputFrame.at<Vec3b>(row, col) = getColorSubpixHelper(inputFrame, sample_point);
 		}
@@ -380,7 +383,78 @@ void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d &R, Eigen::
 	}
 }
 
-void positionPX2LLA(Mat &frame, Eigen::Vector2d &pixel_coords, const Point3d& ECEF_origin, const double& en_extent, const double& num_pixels, Eigen::Vector3d &point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
+//void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d &R, Eigen::Vector3d &t, double en_extent, double num_pixels, bool showFrames, Mat &outputFrame) {
+//
+//	Eigen::Vector2d NorthBounds(-en_extent, en_extent);
+//	Eigen::Vector2d EastBounds(-en_extent, en_extent);
+//	double GSD = 2 * en_extent / num_pixels;
+//
+//	outputFrame = Mat(num_pixels, num_pixels, CV_8UC3);
+//
+//	Mat frameCopy;
+//	if (showFrames) {
+//		inputFrame.copyTo(frameCopy);
+//	}
+//
+//	for (int row = 0; row < num_pixels; row++) {
+//		for (int col = 0; col < num_pixels; col++) {
+//			Eigen::Vector2d pixel_coords(col, row);
+//			Eigen::Vector2d ref_coords = PixCoordsToRefCoords(pixel_coords, GSD, num_pixels, NorthBounds, EastBounds);
+//
+//			Eigen::Vector3d pixel_enu(ref_coords(0), ref_coords(1), 0);
+//
+//			Eigen::Vector3d pixel_cam = R.inverse() * (pixel_enu - t);
+//			double point_bearing[3] = { pixel_cam(0), pixel_cam(1), pixel_cam(2) };
+//			double point_pixel[2];
+//
+//			world2cam(point_pixel, point_bearing, &o);
+//
+//			if (showFrames) {
+//				circle(frameCopy, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
+//			}
+//			
+//			Point2d sample_point(point_pixel[1], point_pixel[0]);
+//			outputFrame.at<Vec3b>(row, col) = getColorSubpixHelper(inputFrame, sample_point);
+//		}
+//	}
+//
+//	if (showFrames) {
+//		imshow("Sampling Region", frameCopy);
+//		imshow("Resampled", outputFrame);
+//		imwrite(GCP_LOCATION + "sampling_region.png", frameCopy);
+//		imwrite(GCP_LOCATION + "resampled_reg_frame.png", outputFrame);
+//	}
+//}
+
+void positionPX2LLA(Mat& frame, Eigen::Vector2d& pixel_coords, const Point3d& ECEF_origin, double eastMin, double eastMax, double northMin, double northMax, const double& num_pixels, Eigen::Vector3d& point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
+	double lat, lon, alt;
+
+	double maxExtent = max({ eastMax - eastMin, northMax - northMin });
+	Eigen::Vector2d center(0.5 * (eastMin + eastMax), 0.5 * (northMin + northMax));
+	Eigen::Vector2d NorthBounds(center(1) - maxExtent / 2, center(1) + maxExtent / 2);
+	Eigen::Vector2d EastBounds(center(0) - maxExtent / 2, center(0) + maxExtent / 2);
+	double GSD = maxExtent / num_pixels;
+
+	Eigen::Vector2d ref_coords = PixCoordsToRefCoords(pixel_coords, GSD, num_pixels, NorthBounds, EastBounds);
+
+	Eigen::Vector3d pixel_enu(ref_coords(0), ref_coords(1), 0);
+	Eigen::Vector3d ECEF_vec_origin(ECEF_origin.x, ECEF_origin.y, ECEF_origin.z);
+	Eigen::Vector3d pixel_ECEF = pixel_enu + ECEF_vec_origin;
+	Point3d pixel_point_ECEF(pixel_ECEF(0), pixel_ECEF(1), pixel_ECEF(2));
+	positionECEF2LLA(pixel_point_ECEF, lat, lon, alt);
+
+	point_LLA = Eigen::Vector3d(lat, lon, alt);
+
+	Eigen::Vector3d pixel_cam = R.inverse() * (pixel_enu - t);
+	double point_bearing[3] = { pixel_cam(0), pixel_cam(1), pixel_cam(2) };
+	double point_pixel[2];
+
+	world2cam(point_pixel, point_bearing, &o);
+
+	circle(frame, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
+}
+
+/*void positionPX2LLA(Mat &frame, Eigen::Vector2d &pixel_coords, const Point3d& ECEF_origin, const double& en_extent, const double& num_pixels, Eigen::Vector3d &point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
 	double lat, lon, alt;
 	
 	Eigen::Vector2d NorthBounds(-en_extent, en_extent);
@@ -404,4 +478,4 @@ void positionPX2LLA(Mat &frame, Eigen::Vector2d &pixel_coords, const Point3d& EC
 	world2cam(point_pixel, point_bearing, &o);
 
 	circle(frame, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
-}
+}*/

@@ -12,6 +12,7 @@
 //Eigen Includes
 #include "eigen-3.3.8/Eigen/Core"
 #include "eigen-3.3.8/Eigen/StdVector"
+#include "eigen-3.3.8/Eigen/Geometry"
 
 namespace std {
 	template <typename T> using Evector = vector<T, Eigen::aligned_allocator<T>>;
