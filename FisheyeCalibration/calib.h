@@ -17,20 +17,22 @@ const double APERTURE_DISTANCE_PX = 283;
 const double OUTPUT_FPS = 10;
 const double OUTPUT_RESOLUTION_PX = 512;
 const int MEDIAN_BLUR_RADIUS = 23;
+const string DRIVE_LETTER = "E";
 
 // File Paths
 const string CAPTURE_MODE = "live_fisheye";
 const string LIVE_STREAM_PATH = "rtmp://10.1.1.1/live/drone";
-const string LIVE_IMAGES_PATH = "E:/NIFA/calibration/" + CAPTURE_MODE + "/image_";
-const string CALIB_IMAGES_PATH = "E:/NIFA/calibration/" + CAPTURE_MODE + "/";
-const string CALIB_IMAGES_LOCATIONS_PATH = "E:/NIFA/calibration/params/" + CAPTURE_MODE + "_paths.xml";
-const string CAMERA_MODEL_PATH = "E:/NIFA/calibration/camera_models/" + CAPTURE_MODE + "_model.xml";
-const string GCP_LOCATION = "E:/NIFA/footage/" + LOCATION + "/";
+const string LIVE_IMAGES_PATH = DRIVE_LETTER + ":/NIFA/calibration/" + CAPTURE_MODE + "/image_";
+const string CALIB_IMAGES_PATH = DRIVE_LETTER + ":/NIFA/calibration/" + CAPTURE_MODE + "/";
+const string CALIB_IMAGES_LOCATIONS_PATH = DRIVE_LETTER + ":/NIFA/calibration/params/" + CAPTURE_MODE + "_paths.xml";
+const string CAMERA_MODEL_PATH = DRIVE_LETTER + ":/NIFA/calibration/camera_models/calib_results.txt";
+const string GCP_LOCATION = DRIVE_LETTER + ":/NIFA/footage/" + LOCATION + "/";
 const string GCP_PATH = GCP_LOCATION + "gcp.xml";
 const string GCP_FRAME_PATH = GCP_LOCATION + VIDEO + ".MOV";
 const string GCP_REG_FRAME_PATH = GCP_LOCATION + REG_VIDEO + ".MOV";
 const string GCP_PIXEL_COORDS_PATH = GCP_LOCATION + "pixel_coords.xml";
-const string VIDEO_SAVE_PATH = "E:/NIFA/datasets/" + LOCATION + "_" + VIDEO + ".avi";
+const string VIDEO_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/" + LOCATION + "_111" + VIDEO + ".avi";
+const string FRF_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/frf/test111.frf";
 
 // Calibration
 const Size BOARD_SIZE = Size(7, 5);

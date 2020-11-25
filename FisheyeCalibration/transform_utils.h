@@ -321,8 +321,25 @@ void reprojectExperiments(Mat &img_ref, vector<Point2d> &fiducials_PX, Mat &fidu
 	imwrite(GCP_LOCATION + "reg_frame.png", outputRegFrame);
 }
 
-double get_en_extent(double aperture_dist_px, double &theta, Point3d& centroid_ECEF, Eigen::Vector3d& t_cam_LEA, ocam_model& o) {
-	double lat, lon, alt;
+//double get_en_extent(double aperture_dist_px, double &theta, Point3d& centroid_ECEF, Eigen::Vector3d& t_cam_LEA, ocam_model& o) {
+//	double lat, lon, alt;
+//	positionECEF2LLA(centroid_ECEF, lat, lon, alt);
+//
+//	Eigen::Vector3d centroid_vec_ECEF(centroid_ECEF.x, centroid_ECEF.y, centroid_ECEF.z);
+//	Eigen::Vector3d cam_center_ECEF = t_cam_LEA + centroid_vec_ECEF;
+//	Point3d cam_center_pt_ECEF(cam_center_ECEF(0), cam_center_ECEF(1), cam_center_ECEF(2));
+//	Point3d cam_center_LLA = positionECEF2LLA(cam_center_pt_ECEF);
+//
+//	double aperture3D[3];
+//	double aperture2D[2] = { FINAL_SIZE.height / 2 + aperture_dist_px,  FINAL_SIZE.width / 2 };
+//	cam2world(aperture3D, aperture2D, &o);
+//	theta = acos(-aperture3D[2]);
+//
+//	return tan(theta) * (cam_center_LLA.z - alt);
+//}
+
+void get_centered_extent(const Point3d &centroid_ECEF, const double &aperture_distance_px, const Eigen::Matrix3d &R_cam_ENU, const Eigen::Vector3d &t_cam_ENU, const Eigen::Vector3d& t_cam_LEA, ocam_model &o, Eigen::Vector2d& center, double &max_extent) {
+	double lat, lon, alt, theta;
 	positionECEF2LLA(centroid_ECEF, lat, lon, alt);
 
 	Eigen::Vector3d centroid_vec_ECEF(centroid_ECEF.x, centroid_ECEF.y, centroid_ECEF.z);
@@ -331,20 +348,71 @@ double get_en_extent(double aperture_dist_px, double &theta, Point3d& centroid_E
 	Point3d cam_center_LLA = positionECEF2LLA(cam_center_pt_ECEF);
 
 	double aperture3D[3];
-	double aperture2D[2] = { FINAL_SIZE.height / 2 + aperture_dist_px,  FINAL_SIZE.width / 2 };
+	double aperture2D[2] = { FINAL_SIZE.height / 2 + aperture_distance_px,  FINAL_SIZE.width / 2 };
 	cam2world(aperture3D, aperture2D, &o);
 	theta = acos(-aperture3D[2]);
 
-	return tan(theta) * (cam_center_LLA.z - alt);
+	Eigen::Vector3d OA_ENU = R_cam_ENU * Eigen::Vector3d(0, 0, 1); // Optical Axis in the Camera Frame
+
+	Eigen::AngleAxisd AA1(theta, Eigen::Vector3d(1, 0, 0));
+	Eigen::AngleAxisd AA2(theta, Eigen::Vector3d(-1, 0, 0));
+	Eigen::AngleAxisd AA3(theta, Eigen::Vector3d(0, 1, 0));
+	Eigen::AngleAxisd AA4(theta, Eigen::Vector3d(0, -1, 0));
+	Eigen::Vector3d v1 = AA1.toRotationMatrix() * OA_ENU;
+	Eigen::Vector3d v2 = AA2.toRotationMatrix() * OA_ENU;
+	Eigen::Vector3d v3 = AA3.toRotationMatrix() * OA_ENU;
+	Eigen::Vector3d v4 = AA4.toRotationMatrix() * OA_ENU;
+
+	double t1 = -t_cam_ENU(2) / v1(2);
+	double t2 = -t_cam_ENU(2) / v2(2);
+	double t3 = -t_cam_ENU(2) / v3(2);
+	double t4 = -t_cam_ENU(2) / v4(2);
+
+	Eigen::Vector3d X1_ENU = t_cam_ENU + v1 * t1;
+	Eigen::Vector3d X2_ENU = t_cam_ENU + v2 * t2;
+	Eigen::Vector3d X3_ENU = t_cam_ENU + v3 * t3;
+	Eigen::Vector3d X4_ENU = t_cam_ENU + v4 * t4;
+
+	double eastMin = min({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
+	double eastMax = max({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
+	double northMin = min({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
+	double northMax = max({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
+
+	max_extent = max({ eastMax - eastMin, northMax - northMin });
+	center = Eigen::Vector2d(0.5 * (eastMin + eastMax), 0.5 * (northMin + northMax));
+
 }
 
-void sampleENUSquare(Mat& inputFrame, ocam_model& o, Eigen::Matrix3d& R, Eigen::Vector3d& t, double eastMin, double eastMax, double northMin, double northMax, double num_pixels, bool showFrames, Mat& outputFrame) {
+void positionPX2LLA(Mat& frame, Eigen::Vector2d& pixel_coords, const Point3d& ECEF_origin, const Eigen::Vector2d &center, const double &max_extent, const double &num_pixels, Eigen::Vector3d& point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
+	double lat, lon, alt;
 
-	double maxExtent = max({eastMax - eastMin, northMax - northMin});
-	Eigen::Vector2d center(0.5 * (eastMin + eastMax), 0.5 * (northMin + northMax));
-	Eigen::Vector2d NorthBounds(center(1) - maxExtent / 2, center(1) + maxExtent / 2);
-	Eigen::Vector2d EastBounds(center(0) - maxExtent / 2, center(0) + maxExtent / 2);
-	double GSD = maxExtent / num_pixels;
+	Eigen::Vector2d NorthBounds(center(1) - max_extent / 2, center(1) + max_extent / 2);
+	Eigen::Vector2d EastBounds(center(0) - max_extent / 2, center(0) + max_extent / 2);
+	double GSD = max_extent / num_pixels;
+
+	Eigen::Vector2d ref_coords = PixCoordsToRefCoords(pixel_coords, GSD, num_pixels, NorthBounds, EastBounds);
+
+	Eigen::Vector3d pixel_enu(ref_coords(0), ref_coords(1), 0);
+	Eigen::Vector3d ECEF_vec_origin(ECEF_origin.x, ECEF_origin.y, ECEF_origin.z);
+	Eigen::Vector3d pixel_ECEF = pixel_enu + ECEF_vec_origin;
+	Point3d pixel_point_ECEF(pixel_ECEF(0), pixel_ECEF(1), pixel_ECEF(2));
+	positionECEF2LLA(pixel_point_ECEF, lat, lon, alt);
+
+	point_LLA = Eigen::Vector3d(lat, lon, alt);
+
+	Eigen::Vector3d pixel_cam = R.inverse() * (pixel_enu - t);
+	double point_bearing[3] = { pixel_cam(0), pixel_cam(1), pixel_cam(2) };
+	double point_pixel[2];
+
+	world2cam(point_pixel, point_bearing, &o);
+
+	circle(frame, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
+}
+
+void sampleENUSquare(Mat& inputFrame, ocam_model& o, Eigen::Matrix3d& R, Eigen::Vector3d& t, const Eigen::Vector2d& center, const double& max_extent, const double &num_pixels, bool showFrames, Mat& outputFrame) {
+	Eigen::Vector2d NorthBounds(center(1) - max_extent / 2, center(1) + max_extent / 2);
+	Eigen::Vector2d EastBounds(center(0) - max_extent / 2, center(0) + max_extent / 2);
+	double GSD = max_extent / num_pixels;
 
 	outputFrame = Mat(num_pixels, num_pixels, CV_8UC3);
 
@@ -382,100 +450,3 @@ void sampleENUSquare(Mat& inputFrame, ocam_model& o, Eigen::Matrix3d& R, Eigen::
 		imwrite(GCP_LOCATION + "resampled_reg_frame.png", outputFrame);
 	}
 }
-
-//void sampleENUSquare(Mat &inputFrame, ocam_model& o, Eigen::Matrix3d &R, Eigen::Vector3d &t, double en_extent, double num_pixels, bool showFrames, Mat &outputFrame) {
-//
-//	Eigen::Vector2d NorthBounds(-en_extent, en_extent);
-//	Eigen::Vector2d EastBounds(-en_extent, en_extent);
-//	double GSD = 2 * en_extent / num_pixels;
-//
-//	outputFrame = Mat(num_pixels, num_pixels, CV_8UC3);
-//
-//	Mat frameCopy;
-//	if (showFrames) {
-//		inputFrame.copyTo(frameCopy);
-//	}
-//
-//	for (int row = 0; row < num_pixels; row++) {
-//		for (int col = 0; col < num_pixels; col++) {
-//			Eigen::Vector2d pixel_coords(col, row);
-//			Eigen::Vector2d ref_coords = PixCoordsToRefCoords(pixel_coords, GSD, num_pixels, NorthBounds, EastBounds);
-//
-//			Eigen::Vector3d pixel_enu(ref_coords(0), ref_coords(1), 0);
-//
-//			Eigen::Vector3d pixel_cam = R.inverse() * (pixel_enu - t);
-//			double point_bearing[3] = { pixel_cam(0), pixel_cam(1), pixel_cam(2) };
-//			double point_pixel[2];
-//
-//			world2cam(point_pixel, point_bearing, &o);
-//
-//			if (showFrames) {
-//				circle(frameCopy, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
-//			}
-//			
-//			Point2d sample_point(point_pixel[1], point_pixel[0]);
-//			outputFrame.at<Vec3b>(row, col) = getColorSubpixHelper(inputFrame, sample_point);
-//		}
-//	}
-//
-//	if (showFrames) {
-//		imshow("Sampling Region", frameCopy);
-//		imshow("Resampled", outputFrame);
-//		imwrite(GCP_LOCATION + "sampling_region.png", frameCopy);
-//		imwrite(GCP_LOCATION + "resampled_reg_frame.png", outputFrame);
-//	}
-//}
-
-void positionPX2LLA(Mat& frame, Eigen::Vector2d& pixel_coords, const Point3d& ECEF_origin, double eastMin, double eastMax, double northMin, double northMax, const double& num_pixels, Eigen::Vector3d& point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
-	double lat, lon, alt;
-
-	double maxExtent = max({ eastMax - eastMin, northMax - northMin });
-	Eigen::Vector2d center(0.5 * (eastMin + eastMax), 0.5 * (northMin + northMax));
-	Eigen::Vector2d NorthBounds(center(1) - maxExtent / 2, center(1) + maxExtent / 2);
-	Eigen::Vector2d EastBounds(center(0) - maxExtent / 2, center(0) + maxExtent / 2);
-	double GSD = maxExtent / num_pixels;
-
-	Eigen::Vector2d ref_coords = PixCoordsToRefCoords(pixel_coords, GSD, num_pixels, NorthBounds, EastBounds);
-
-	Eigen::Vector3d pixel_enu(ref_coords(0), ref_coords(1), 0);
-	Eigen::Vector3d ECEF_vec_origin(ECEF_origin.x, ECEF_origin.y, ECEF_origin.z);
-	Eigen::Vector3d pixel_ECEF = pixel_enu + ECEF_vec_origin;
-	Point3d pixel_point_ECEF(pixel_ECEF(0), pixel_ECEF(1), pixel_ECEF(2));
-	positionECEF2LLA(pixel_point_ECEF, lat, lon, alt);
-
-	point_LLA = Eigen::Vector3d(lat, lon, alt);
-
-	Eigen::Vector3d pixel_cam = R.inverse() * (pixel_enu - t);
-	double point_bearing[3] = { pixel_cam(0), pixel_cam(1), pixel_cam(2) };
-	double point_pixel[2];
-
-	world2cam(point_pixel, point_bearing, &o);
-
-	circle(frame, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
-}
-
-/*void positionPX2LLA(Mat &frame, Eigen::Vector2d &pixel_coords, const Point3d& ECEF_origin, const double& en_extent, const double& num_pixels, Eigen::Vector3d &point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
-	double lat, lon, alt;
-	
-	Eigen::Vector2d NorthBounds(-en_extent, en_extent);
-	Eigen::Vector2d EastBounds(-en_extent, en_extent);
-	double GSD = 2 * en_extent / num_pixels;
-
-	Eigen::Vector2d ref_coords = PixCoordsToRefCoords(pixel_coords, GSD, num_pixels, NorthBounds, EastBounds);
-
-	Eigen::Vector3d pixel_enu(ref_coords(0), ref_coords(1), 0);
-	Eigen::Vector3d ECEF_vec_origin(ECEF_origin.x, ECEF_origin.y, ECEF_origin.z);
-	Eigen::Vector3d pixel_ECEF = pixel_enu + ECEF_vec_origin;
-	Point3d pixel_point_ECEF(pixel_ECEF(0), pixel_ECEF(1), pixel_ECEF(2));
-	positionECEF2LLA(pixel_point_ECEF, lat, lon, alt);
-
-	point_LLA = Eigen::Vector3d(lat, lon, alt);
-
-	Eigen::Vector3d pixel_cam = R.inverse() * (pixel_enu - t);
-	double point_bearing[3] = { pixel_cam(0), pixel_cam(1), pixel_cam(2) };
-	double point_pixel[2];
-
-	world2cam(point_pixel, point_bearing, &o);
-
-	circle(frame, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
-}*/
