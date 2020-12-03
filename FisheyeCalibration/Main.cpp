@@ -48,14 +48,15 @@ int main(int argc, char** argv) {
     // Input video and shadow detection
     VideoCapture cap(GCP_FRAME_PATH);
     if (!cap.isOpened())
-    return -1;
-    //cap.set(CAP_PROP_POS_FRAMES, 160 * 30);
+        return -1;
     int num_frames = static_cast<int>(cap.get(CAP_PROP_FRAME_COUNT));
     int frame_rate = static_cast<int>(round(cap.get(CAP_PROP_FPS)));
     int num_layers = ceil(num_frames / frame_rate);
     cout << num_frames << " frames." << endl;
     cout << frame_rate << " FPS." << endl;
     cout << num_layers << " layers." << endl;
+
+    cap.set(CAP_PROP_POS_FRAMES, VIDEO_INIT_SECOND * frame_rate);
 
     Mat frame, img_rot, H, hsv, brightest, binary, img_rot_sampled, binary_sampled;
     vector<Mat> hsv_channels;
@@ -118,11 +119,16 @@ int main(int argc, char** argv) {
 
             sampleENUSquare(img_rot, o, R_cam_ENU, t_cam_ENU, center, max_extent, OUTPUT_RESOLUTION_PX, false, img_rot_sampled);
             sampleENUSquare(binary, o, R_cam_ENU, t_cam_ENU, center, max_extent, OUTPUT_RESOLUTION_PX, false, binary_sampled);
+
+            Mat mask, img_masked;
+            getApertureMask(img_rot_sampled, mask);
+            img_rot_sampled.copyTo(img_masked, mask);
             
             video << binary_sampled;
             cvtColor(binary_sampled, binary_sampled, COLOR_RGB2GRAY);
-            imshow("Frame", binary_sampled);
-            imshow("Frame 2", img_rot_sampled);
+            imshow("Frame Binary", binary_sampled);
+            imshow("Frame Stabilized", img_rot_sampled);
+            imshow("Frame Masked", img_masked);
 
 		    //Add a new layer and set it up
 		    FRFLayer* newLayer = shadowMap.AddLayer();
@@ -136,14 +142,16 @@ int main(int argc, char** argv) {
 
             for (uint32_t row = 0U; row < shadowMap.Rows(); row++) {
                 for (uint32_t col = 0U; col < shadowMap.Cols(); col++) {
-                    newLayer->SetValue(row, col, (int) binary_sampled.at<uchar>(row, col));
+                    if ((int) mask.at<uchar>(row, col) == 0) {
+                        /*newLayer->SetValue(row, col, NAN);*/
+                        newLayer->SetValue(row, col, (int)binary_sampled.at<uchar>(row, col));
+                    } else {
+                        newLayer->SetValue(row, col, (int) binary_sampled.at<uchar>(row, col));
+                    }
                 }
             }
             myShadowMapInfoBlock.LayerTimeTags.push_back(layer_num++);
             waitKey(1);
-
-            if (count > 500)
-                break;
         }
     }
 

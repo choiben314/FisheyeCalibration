@@ -9,8 +9,9 @@ using namespace cv;
 
 /*** USER-DEFINED PARAMS ***/
 
-const string LOCATION = "becker_07_24_2020";
+const string LOCATION = "elgin_07_27_2020";
 const string VIDEO = "DJI_0001"; // .MOV
+const int VIDEO_INIT_SECOND = 0;
 const string REG_VIDEO = "DJI_0001"; // .MOV
 const int REG_INIT_SECOND = 0;
 const double APERTURE_DISTANCE_PX = 283;
@@ -31,8 +32,8 @@ const string GCP_PATH = GCP_LOCATION + "gcp.xml";
 const string GCP_FRAME_PATH = GCP_LOCATION + VIDEO + ".MOV";
 const string GCP_REG_FRAME_PATH = GCP_LOCATION + REG_VIDEO + ".MOV";
 const string GCP_PIXEL_COORDS_PATH = GCP_LOCATION + "pixel_coords.xml";
-const string VIDEO_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/" + LOCATION + "_" + VIDEO + ".avi";
-const string FRF_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/frf/test.frf";
+const string VIDEO_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/video/" + LOCATION + "_" + VIDEO + ".avi";
+const string FRF_SAVE_PATH = DRIVE_LETTER + ":/NIFA/datasets/frf/" + LOCATION + "_" + VIDEO + ".frf";
 
 // Calibration
 const Size BOARD_SIZE = Size(7, 5);

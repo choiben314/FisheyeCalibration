@@ -2423,12 +2423,12 @@ static void LoadImageAndInspectShadowMapFile(std::string Filename) {
 	if (shadowMap.NumberOfLayers() == 0U)
 		std::cerr << "Uh-oh. This image is empty. Nothing to display.\r\n";
 	else {
-		std::cerr << "Value at (73,24): " << shadowMap.Layer(0U)->GetValue(73U, 24U) << "\r\n";
-		std::cerr << "Value at (12,82): " << shadowMap.Layer(0U)->GetValue(12U, 82U) << "\r\n";
-		std::cerr << "Value at (31,3900): " << shadowMap.Layer(0U)->GetValue(31U, 3900U) << "\r\n";
-		std::cerr << "Value at (19,122): " << shadowMap.Layer(0U)->GetValue(19U, 122U) << "\r\n";
-		std::cerr << "Value at (19,123): " << shadowMap.Layer(0U)->GetValue(19U, 123U) << "\r\n";
-		std::cerr << "Value at (19,124): " << shadowMap.Layer(0U)->GetValue(19U, 124U) << "\r\n";
+		std::cerr << "Value at (73, 24): " << shadowMap.Layer(0U)->GetValue(73U, 24U) << "\r\n";
+		std::cerr << "Value at (12, 82): " << shadowMap.Layer(0U)->GetValue(12U, 82U) << "\r\n";
+		std::cerr << "Value at (31, 3900): " << shadowMap.Layer(0U)->GetValue(31U, 3900U) << "\r\n";
+		std::cerr << "Value at (19, 122): " << shadowMap.Layer(0U)->GetValue(19U, 122U) << "\r\n";
+		std::cerr << "Value at (19, 123): " << shadowMap.Layer(0U)->GetValue(19U, 123U) << "\r\n";
+		std::cerr << "Value at (256, 256): " << shadowMap.Layer(0U)->GetValue(256U, 256U) << "\r\n";
 	}
 	std::cerr << "\r\n";
 

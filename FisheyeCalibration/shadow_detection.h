@@ -41,6 +41,10 @@ void getSurfRotation(const Mat& ref_color, const Mat& rot_color, Mat& H) {
 		rot.push_back(keypoints_rot[good_matches[i].trainIdx].pt);
 	}
 	H = estimateAffinePartial2D(rot, ref);
+	//double s_inv = 1 / sqrt(H.at<double>(0, 0) * H.at<double>(0, 0) + H.at<double>(0, 1) * H.at<double>(0, 1));
+
+	//Mat unscale = (Mat_<double>(2, 3) << s_inv, s_inv, 1, s_inv, s_inv, 1);
+	//H = H.mul(unscale);
 }
 
 void getBinaryCloudMask(const Mat& img, Mat& bright, Mat& binary) {
@@ -62,4 +66,25 @@ void getBinaryCloudMask(const Mat& img, Mat& bright, Mat& binary) {
 
 	// Dynamic thresholding to binary by minimizing within-class variance 
 	threshold(diff, binary, 0, 255, THRESH_BINARY | THRESH_OTSU);
+}
+
+void getApertureMask(const Mat& img, Mat& mask) {
+	Mat img_thresh, img_binary, img_filled, img_filled_inv, img_final;
+
+	cvtColor(img, img_binary, COLOR_RGB2GRAY);
+	threshold(img_binary, img_thresh, 30, 255, THRESH_BINARY);
+	img_thresh.copyTo(img_filled);
+	
+	floodFill(img_filled, Point(0, 0), Scalar(255));
+	floodFill(img_filled, Point(0, OUTPUT_RESOLUTION_PX - 1), Scalar(255));
+	floodFill(img_filled, Point(OUTPUT_RESOLUTION_PX - 1, 0), Scalar(255));
+	floodFill(img_filled, Point(OUTPUT_RESOLUTION_PX - 1, OUTPUT_RESOLUTION_PX - 1), Scalar(255));
+	
+	bitwise_not(img_filled, img_filled_inv);
+	mask = img_thresh | img_filled_inv;
+
+	floodFill(mask, Point(0, 0), Scalar(0));
+	floodFill(mask, Point(0, OUTPUT_RESOLUTION_PX - 1), Scalar(0));
+	floodFill(mask, Point(OUTPUT_RESOLUTION_PX - 1, 0), Scalar(0));
+	floodFill(mask, Point(OUTPUT_RESOLUTION_PX - 1, OUTPUT_RESOLUTION_PX - 1), Scalar(0));
 }
