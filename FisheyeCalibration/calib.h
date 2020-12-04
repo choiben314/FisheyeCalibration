@@ -373,7 +373,7 @@ void getRegisteredImage(const Mat& frame, vector<Point2d>& enz_coords, bool show
         registered.push_back(getColorSubpixHelper(frame, enz_coords[i]));
     }
     int length = sqrt(enz_coords.size());
-    new_frame = Mat(registered).reshape(3, length); // FIX THIS THINGGGGG
+    new_frame = Mat(registered).reshape(3, length);
     rotate(new_frame, new_frame, ROTATE_90_COUNTERCLOCKWISE);
     if (show) {
         imshow("Registered and resampled", new_frame);

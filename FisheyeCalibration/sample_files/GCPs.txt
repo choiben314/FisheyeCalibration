@@ -1,0 +1,9 @@
+Frame 1:
+For all video files in this folder
+
+GCP ID	WGS84 Corrdinates
+A:		44.129139, -92.293407
+B:		44.128534, -92.293403
+C:		44.128539, -92.293969
+D:		44.129140, -92.293963
+E:		44.129321, -92.297202

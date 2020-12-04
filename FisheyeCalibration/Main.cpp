@@ -25,6 +25,7 @@ int main(int argc, char** argv) {
 
     // Camera calibration
 
+    // markFiducials only happens if pixel_coords.xml is not in the relevant directory
     getRegistrationFrame(img_ref);
     markFiducials(img_ref, fiducials_LLA, fiducials_PX);
     LLA2Radians(fiducials_LLA);
@@ -123,7 +124,7 @@ int main(int argc, char** argv) {
             Mat mask, img_masked;
             getApertureMask(img_rot_sampled, mask);
             img_rot_sampled.copyTo(img_masked, mask);
-            
+
             video << binary_sampled;
             cvtColor(binary_sampled, binary_sampled, COLOR_RGB2GRAY);
             imshow("Frame Binary", binary_sampled);
@@ -143,8 +144,8 @@ int main(int argc, char** argv) {
             for (uint32_t row = 0U; row < shadowMap.Rows(); row++) {
                 for (uint32_t col = 0U; col < shadowMap.Cols(); col++) {
                     if ((int) mask.at<uchar>(row, col) == 0) {
-                        /*newLayer->SetValue(row, col, NAN);*/
-                        newLayer->SetValue(row, col, (int)binary_sampled.at<uchar>(row, col));
+                        newLayer->SetValue(row, col, NAN);
+                        //newLayer->SetValue(row, col, (int)binary_sampled.at<uchar>(row, col));
                     } else {
                         newLayer->SetValue(row, col, (int) binary_sampled.at<uchar>(row, col));
                     }
